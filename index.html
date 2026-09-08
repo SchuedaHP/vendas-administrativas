@@ -21,7 +21,17 @@
         </div>
       </section>
 
-      <section class="form-card" aria-labelledby="form-title">
+      <div class="workspace">
+        <nav class="tabs" aria-label="Áreas de vendas administrativas">
+          <button class="tab-button is-active" type="button" role="tab" aria-selected="true" aria-controls="register-panel" id="register-tab" data-tab="register-panel">
+            Registrar venda
+          </button>
+          <button class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="records-panel" id="records-tab" data-tab="records-panel">
+            Consultar registros
+          </button>
+        </nav>
+
+      <section class="form-card view-panel" id="register-panel" role="tabpanel" aria-labelledby="register-tab form-title">
         <div class="card-heading">
           <div>
             <p class="step-label">Novo registro</p>
@@ -85,6 +95,58 @@
           <p class="submission-note">Ao enviar, você confirma que revisou os dados informados.</p>
         </form>
       </section>
+
+      <section class="form-card records-card view-panel" id="records-panel" role="tabpanel" aria-labelledby="records-tab records-title" hidden>
+        <div class="card-heading records-heading">
+          <div>
+            <p class="step-label">Conferência</p>
+            <h2 id="records-title">Registros enviados</h2>
+            <p class="records-description">Os cadastros mais recentes aparecem primeiro.</p>
+          </div>
+          <button id="refresh-records" class="secondary-button" type="button">Atualizar</button>
+        </div>
+
+        <div class="search-field">
+          <label for="records-search">Buscar nos registros</label>
+          <div class="search-control">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20.7 19.3-4.2-4.2a7.5 7.5 0 1 0-1.4 1.4l4.2 4.2 1.4-1.4ZM5 10.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0Z"/></svg>
+            <input id="records-search" type="search" autocomplete="off" placeholder="Orçamento, titular, responsável, status…">
+          </div>
+        </div>
+
+        <div class="records-toolbar">
+          <p id="records-count" aria-live="polite">Carregando registros…</p>
+          <p class="privacy-inline">CPF e telefone são exibidos parcialmente.</p>
+        </div>
+
+        <div id="records-status" class="form-status" role="status" aria-live="polite" hidden></div>
+
+        <div class="table-shell" id="records-table-shell" hidden>
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Inserido em</th>
+                <th scope="col">Protocolo</th>
+                <th scope="col">Orçamento</th>
+                <th scope="col">Titular</th>
+                <th scope="col">CPF</th>
+                <th scope="col">Telefone</th>
+                <th scope="col">Responsável</th>
+                <th scope="col">Status</th>
+                <th scope="col">Anulado em</th>
+                <th scope="col">Motivo da anulação</th>
+              </tr>
+            </thead>
+            <tbody id="records-body"></tbody>
+          </table>
+        </div>
+
+        <div id="records-empty" class="empty-state" hidden>
+          <strong>Nenhum registro encontrado</strong>
+          <span>Tente buscar por outro termo ou atualize a listagem.</span>
+        </div>
+      </section>
+      </div>
     </main>
 
     <footer>Uso interno da operação · Comercial Digital</footer>

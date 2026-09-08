@@ -1,6 +1,8 @@
 # Vendas Administrativas
 
-Formulário público e sem consulta de registros para a operação administrativa da gestão Josy.
+Formulário público para a operação administrativa da gestão Josy, com uma segunda aba de conferência
+dos registros. A listagem vem da função Vercel, em ordem decrescente de inserção; CPF e telefone são
+mascarados no servidor e o fingerprint técnico nunca é enviado ao navegador.
 
 ## Publicação
 

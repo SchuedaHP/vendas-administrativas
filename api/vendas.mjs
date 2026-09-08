@@ -59,6 +59,65 @@ function envConfig() {
   return { url, key, rateSecret };
 }
 
+function maskCpfForDisplay(value) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  return /^\d{11}$/.test(digits) ? `***.***.${digits.slice(6, 9)}-${digits.slice(9)}` : "—";
+}
+
+function maskPhoneForDisplay(value) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  return /^\d{11}$/.test(digits) ? `(${digits.slice(0, 2)}) *****-${digits.slice(-4)}` : "—";
+}
+
+export function recordForDisplay(record) {
+  return {
+    id: String(record.id),
+    created_at: record.created_at,
+    numero_orcamento: record.numero_orcamento,
+    nome_titular: record.nome_titular,
+    cpf: maskCpfForDisplay(record.cpf),
+    telefone: maskPhoneForDisplay(record.telefone),
+    responsavel: record.responsavel,
+    status: record.status,
+    anulado_em: record.anulado_em,
+    motivo_anulacao: record.motivo_anulacao,
+  };
+}
+
+export async function GET() {
+  const requestId = crypto.randomUUID();
+  const config = envConfig();
+  if (!config) {
+    console.error("vendas_administrativas_config_error", { requestId });
+    return reply(503, { ok: false, message: "Consulta temporariamente indisponível. Tente novamente." });
+  }
+
+  try {
+    const pageSize = 1000;
+    const records = [];
+    for (let offset = 0; ; offset += pageSize) {
+      const response = await fetch(`${config.url}/rest/v1/vendas_administrativas?select=id,created_at,numero_orcamento,cpf,nome_titular,telefone,responsavel,status,anulado_em,motivo_anulacao&order=created_at.desc,id.desc&offset=${offset}&limit=${pageSize}`, {
+        headers: {
+          apikey: config.key,
+          Authorization: `Bearer ${config.key}`,
+          Accept: "application/json",
+        },
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok || !Array.isArray(body)) {
+        console.error("vendas_administrativas_list_error", { requestId, status: response.status });
+        return reply(502, { ok: false, message: "Não foi possível carregar os registros agora." });
+      }
+      records.push(...body.map(recordForDisplay));
+      if (body.length < pageSize) break;
+    }
+    return reply(200, { ok: true, records });
+  } catch (error) {
+    console.error("vendas_administrativas_list_request_error", { requestId, name: error instanceof Error ? error.name : "unknown" });
+    return reply(502, { ok: false, message: "Não foi possível carregar os registros agora." });
+  }
+}
+
 export async function POST(request) {
   const requestId = crypto.randomUUID();
   if (!originIsAllowed(request)) return reply(403, { ok: false, message: "Origem da solicitação não autorizada." });

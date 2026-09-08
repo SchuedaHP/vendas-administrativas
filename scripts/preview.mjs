@@ -12,6 +12,15 @@ http.createServer(async (req, res) => {
     res.end(JSON.stringify({ ok: false, message: "Prévia local: o envio será habilitado após configurar a Vercel." }));
     return;
   }
+  if (req.url === "/api/vendas" && req.method === "GET") {
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+    res.end(JSON.stringify({ ok: true, records: [
+      { id: "64", created_at: "2026-09-08T17:42:00Z", numero_orcamento: "8401732", nome_titular: "MARIA DE OLIVEIRA", cpf: "***.***.247-25", telefone: "(11) *****-4321", responsavel: "PATRICIA LIMA", status: "ATIVO", anulado_em: null, motivo_anulacao: null },
+      { id: "63", created_at: "2026-09-08T16:15:00Z", numero_orcamento: "8401698", nome_titular: "JOÃO DA SILVA", cpf: "***.***.884-09", telefone: "(85) *****-1020", responsavel: "GIOVANNA SANTANA", status: "ANULADO", anulado_em: "2026-09-08T16:40:00Z", motivo_anulacao: "ORÇAMENTO INFORMADO INCORRETAMENTE" },
+      { id: "62", created_at: "2026-09-08T14:07:00Z", numero_orcamento: "8401511", nome_titular: "ANA PAULA SOUZA", cpf: "***.***.552-70", telefone: "(81) *****-9087", responsavel: "TATI SILVA", status: "ATIVO", anulado_em: null, motivo_anulacao: null }
+    ] }));
+    return;
+  }
   const pathname = decodeURIComponent((req.url || "/").split("?")[0]);
   const relative = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
   const safe = normalize(relative).replace(/^(\.\.(\/|\\|$))+/, "");

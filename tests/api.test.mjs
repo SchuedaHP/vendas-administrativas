@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { POST } from "../api/vendas.mjs";
+import { GET, POST, recordForDisplay } from "../api/vendas.mjs";
 
 const valid = () => ({
   numero_orcamento: "123",
@@ -74,4 +74,63 @@ test("interface contém trava contra duplo clique", async () => {
   const source = await readFile(new URL("../app.js", import.meta.url), "utf8");
   assert.match(source, /if \(submitting\) return;/);
   assert.match(source, /submitButton\.disabled = active/);
+});
+
+test("consulta mascara PII e preserva os campos de conferência", () => {
+  assert.deepEqual(recordForDisplay({
+    id: 7,
+    created_at: "2026-09-08T15:00:00Z",
+    numero_orcamento: "123",
+    cpf: "52998224725",
+    nome_titular: "JOÃO DA SILVA",
+    telefone: "11987654321",
+    responsavel: "PATRICIA LIMA",
+    status: "ATIVO",
+    anulado_em: null,
+    motivo_anulacao: null,
+    request_fingerprint: "segredo",
+  }), {
+    id: "7",
+    created_at: "2026-09-08T15:00:00Z",
+    numero_orcamento: "123",
+    nome_titular: "JOÃO DA SILVA",
+    cpf: "***.***.247-25",
+    telefone: "(11) *****-4321",
+    responsavel: "PATRICIA LIMA",
+    status: "ATIVO",
+    anulado_em: null,
+    motivo_anulacao: null,
+  });
+});
+
+test("consulta pede registros em ordem decrescente e nunca devolve PII bruto", async () => {
+  configure();
+  const originalFetch = globalThis.fetch;
+  let requestedUrl;
+  globalThis.fetch = async (url) => {
+    requestedUrl = String(url);
+    return new Response(JSON.stringify([{
+      id: 8,
+      created_at: "2026-09-08T16:00:00Z",
+      numero_orcamento: "456",
+      cpf: "52998224725",
+      nome_titular: "MARIA TESTE",
+      telefone: "11987654321",
+      responsavel: "TATI SILVA",
+      status: "ATIVO",
+      anulado_em: null,
+      motivo_anulacao: null,
+    }]), { status: 200 });
+  };
+  try {
+    const response = await GET();
+    const text = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(requestedUrl, /order=created_at\.desc,id\.desc/);
+    assert.equal(text.includes("52998224725"), false);
+    assert.equal(text.includes("11987654321"), false);
+    assert.match(text, /\*\*\*\.\*\*\*\.247-25/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

@@ -5,6 +5,8 @@ const submitButton = document.querySelector("#submit-button");
 const statusBox = document.querySelector("#form-status");
 const startedAt = new Date().toISOString();
 let submitting = false;
+let recordsLoaded = false;
+let records = [];
 
 const field = (name) => form.elements.namedItem(name);
 
@@ -70,6 +72,7 @@ form.addEventListener("submit", async (event) => {
     if (!response.ok) throw new Error(result?.message || "Não foi possível registrar agora. Tente novamente.");
     form.reset();
     showStatus("success", `Venda registrada com sucesso. Protocolo ${result.id}.`);
+    recordsLoaded = false;
     field("numero_orcamento").focus();
   } catch (error) {
     showStatus("error", error instanceof Error ? error.message : "Não foi possível registrar agora. Tente novamente.");
@@ -77,6 +80,132 @@ form.addEventListener("submit", async (event) => {
     setLoading(false);
   }
 });
+
+const tabs = [...document.querySelectorAll(".tab-button")];
+const panels = [...document.querySelectorAll(".view-panel")];
+const recordsSearch = document.querySelector("#records-search");
+const recordsBody = document.querySelector("#records-body");
+const recordsCount = document.querySelector("#records-count");
+const recordsStatus = document.querySelector("#records-status");
+const recordsTableShell = document.querySelector("#records-table-shell");
+const recordsEmpty = document.querySelector("#records-empty");
+const refreshRecordsButton = document.querySelector("#refresh-records");
+const dateTimeFormatter = new Intl.DateTimeFormat("pt-BR", {
+  dateStyle: "short",
+  timeStyle: "short",
+  timeZone: "America/Sao_Paulo",
+});
+
+function normalizeSearch(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleUpperCase("pt-BR");
+}
+
+function formatDateTime(value) {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? "—" : dateTimeFormatter.format(parsed);
+}
+
+function appendCell(row, value, className = "") {
+  const cell = document.createElement("td");
+  cell.textContent = value || "—";
+  if (className) cell.className = className;
+  row.append(cell);
+  return cell;
+}
+
+function renderRecords() {
+  const query = normalizeSearch(recordsSearch.value.trim());
+  const filtered = query
+    ? records.filter((record) => normalizeSearch(Object.values(record).join(" ")).includes(query))
+    : records;
+
+  recordsBody.replaceChildren();
+  for (const record of filtered) {
+    const row = document.createElement("tr");
+    appendCell(row, formatDateTime(record.created_at), "date-cell");
+    appendCell(row, record.id, "numeric-cell");
+    appendCell(row, record.numero_orcamento, "numeric-cell");
+    appendCell(row, record.nome_titular);
+    appendCell(row, record.cpf, "numeric-cell");
+    appendCell(row, record.telefone, "numeric-cell");
+    appendCell(row, record.responsavel);
+    const statusCell = document.createElement("td");
+    row.append(statusCell);
+    const status = document.createElement("span");
+    status.className = `status-pill ${record.status === "ANULADO" ? "is-cancelled" : "is-active"}`;
+    status.textContent = record.status;
+    statusCell.append(status);
+    appendCell(row, formatDateTime(record.anulado_em), "date-cell");
+    appendCell(row, record.motivo_anulacao);
+    recordsBody.append(row);
+  }
+
+  const totalLabel = records.length === 1 ? "1 registro" : `${records.length} registros`;
+  recordsCount.textContent = query ? `${filtered.length} de ${totalLabel}` : totalLabel;
+  recordsTableShell.hidden = filtered.length === 0;
+  recordsEmpty.hidden = filtered.length !== 0;
+}
+
+function showRecordsStatus(message) {
+  recordsStatus.hidden = false;
+  recordsStatus.className = "form-status error";
+  recordsStatus.textContent = message;
+  recordsTableShell.hidden = true;
+  recordsEmpty.hidden = true;
+}
+
+async function loadRecords({ force = false } = {}) {
+  if (recordsLoaded && !force) return;
+  recordsLoaded = false;
+  refreshRecordsButton.disabled = true;
+  refreshRecordsButton.textContent = "Atualizando…";
+  recordsStatus.hidden = true;
+  recordsCount.textContent = "Carregando registros…";
+  try {
+    const response = await fetch("/api/vendas", { headers: { Accept: "application/json" }, cache: "no-store" });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !Array.isArray(result?.records)) throw new Error(result?.message || "Não foi possível carregar os registros agora.");
+    records = result.records;
+    recordsLoaded = true;
+    renderRecords();
+  } catch (error) {
+    recordsCount.textContent = "Listagem indisponível";
+    showRecordsStatus(error instanceof Error ? error.message : "Não foi possível carregar os registros agora.");
+  } finally {
+    refreshRecordsButton.disabled = false;
+    refreshRecordsButton.textContent = "Atualizar";
+  }
+}
+
+async function activateTab(tab) {
+  const panelId = tab.dataset.tab;
+  for (const item of tabs) {
+    const active = item === tab;
+    item.classList.toggle("is-active", active);
+    item.setAttribute("aria-selected", String(active));
+    item.tabIndex = active ? 0 : -1;
+  }
+  for (const panel of panels) panel.hidden = panel.id !== panelId;
+  if (panelId === "records-panel") await loadRecords();
+}
+
+for (const [index, tab] of tabs.entries()) {
+  tab.addEventListener("click", () => { void activateTab(tab); });
+  tab.addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+    tabs[nextIndex].focus();
+    void activateTab(tabs[nextIndex]);
+  });
+}
+
+recordsSearch.addEventListener("input", renderRecords);
+refreshRecordsButton.addEventListener("click", () => { void loadRecords({ force: true }); });
 
 function registerWebMcp() {
   const context = document.modelContext;
