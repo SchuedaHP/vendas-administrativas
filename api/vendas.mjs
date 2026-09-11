@@ -69,6 +69,14 @@ function maskPhoneForDisplay(value) {
   return /^\d{11}$/.test(digits) ? `(${digits.slice(0, 2)}) *****-${digits.slice(-4)}` : "—";
 }
 
+// A mensagem de duplicidade é montada por nós no banco, mas ela chega por uma resposta de rede:
+// limitar tamanho e caracteres impede que qualquer texto inesperado vire conteúdo do formulário.
+export function sanitizeHint(hint) {
+  const texto = String(hint ?? "").replace(/\s+/g, " ").trim();
+  if (!texto || texto.length > 240) return "";
+  return /^[\p{L}\p{N} .,:/()-]+$/u.test(texto) ? texto : "";
+}
+
 export function recordForDisplay(record) {
   return {
     id: String(record.id),
@@ -170,7 +178,15 @@ export async function POST(request) {
     const body = await response.json().catch(() => null);
     if (!response.ok) {
       const limited = response.status === 400 && body?.message === "limite_de_envios_excedido";
-      console.error("vendas_administrativas_supabase_error", { requestId, status: response.status, code: body?.code || null });
+      // Um orçamento só pode ter um cadastro ATIVO (sql/002). A `hint` vem do nosso próprio
+      // format() no banco -- orçamento validado como ^[0-9]{1,12}$ e responsável restrito a três
+      // valores --, então é texto seguro para exibir. O fallback cobre a hint ausente.
+      const duplicado = response.status === 400 && body?.message === "orcamento_ja_cadastrado";
+      console.error("vendas_administrativas_supabase_error", { requestId, status: response.status, code: body?.code || null, duplicado });
+      if (duplicado) {
+        return reply(409, { ok: false, campo: "numero_orcamento",
+          message: sanitizeHint(body?.hint) || "Este número de orçamento já tem um cadastro ativo." });
+      }
       return reply(limited ? 429 : 502, { ok: false, message: limited ? "Limite de envios atingido. Aguarde antes de tentar novamente." : "Não foi possível registrar agora. Tente novamente." });
     }
     const record = Array.isArray(body) ? body[0] : body;

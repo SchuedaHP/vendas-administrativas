@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { GET, POST, recordForDisplay } from "../api/vendas.mjs";
+import { GET, POST, recordForDisplay, sanitizeHint } from "../api/vendas.mjs";
 
 const valid = () => ({
   numero_orcamento: "123",
@@ -133,4 +133,67 @@ test("consulta pede registros em ordem decrescente e nunca devolve PII bruto", a
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+// ---- Trava de orcamento duplicado (David, 11/09/2026) ----
+
+function supabaseDuplicado(hint) {
+  return async () => new Response(JSON.stringify({
+    code: "P0001", message: "orcamento_ja_cadastrado", details: null, hint,
+  }), { status: 400 });
+}
+
+test("orçamento já cadastrado devolve 409 com a mensagem do banco", async () => {
+  configure();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = supabaseDuplicado(
+    "O orcamento 4669586 ja foi cadastrado por TATI SILVA em 05/08/2026 09:12.");
+  try {
+    const response = await POST(request());
+    assert.equal(response.status, 409);
+    const body = await response.json();
+    assert.equal(body.ok, false);
+    assert.equal(body.campo, "numero_orcamento");
+    assert.match(body.message, /ja foi cadastrado por TATI SILVA/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("duplicado sem hint utilizável cai na mensagem genérica, nunca vaza o payload do banco", async () => {
+  configure();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = supabaseDuplicado('<script>alert("x")</script>');
+  try {
+    const response = await POST(request());
+    assert.equal(response.status, 409);
+    const body = await response.json();
+    assert.equal(body.message, "Este número de orçamento já tem um cadastro ativo.");
+    assert.doesNotMatch(body.message, /script/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("duplicado não é confundido com o limite de envios", async () => {
+  configure();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    code: "P0001", message: "limite_de_envios_excedido", hint: null,
+  }), { status: 400 });
+  try {
+    const response = await POST(request());
+    assert.equal(response.status, 429);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("sanitizeHint recusa texto longo, com marcação ou vazio", () => {
+  assert.equal(sanitizeHint("Orcamento 123 ja cadastrado por TATI SILVA em 05/08/2026 09:12."),
+               "Orcamento 123 ja cadastrado por TATI SILVA em 05/08/2026 09:12.");
+  assert.equal(sanitizeHint("<b>oi</b>"), "");
+  assert.equal(sanitizeHint("x".repeat(241)), "");
+  assert.equal(sanitizeHint(null), "");
+  assert.equal(sanitizeHint("linha um\nlinha dois"), "linha um linha dois");
 });
