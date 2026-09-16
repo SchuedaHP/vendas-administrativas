@@ -1,4 +1,5 @@
 import { digitsOnly, maskCpf, maskPhone, validatePayload } from "/lib/validation.mjs";
+import { buildXlsx } from "/lib/xlsx.mjs";
 
 const form = document.querySelector("#sales-form");
 const submitButton = document.querySelector("#submit-button");
@@ -90,11 +91,30 @@ const recordsStatus = document.querySelector("#records-status");
 const recordsTableShell = document.querySelector("#records-table-shell");
 const recordsEmpty = document.querySelector("#records-empty");
 const refreshRecordsButton = document.querySelector("#refresh-records");
+const exportRecordsButton = document.querySelector("#export-records");
 const dateTimeFormatter = new Intl.DateTimeFormat("pt-BR", {
   dateStyle: "short",
   timeStyle: "short",
   timeZone: "America/Sao_Paulo",
 });
+
+// O que sai na planilha é exatamente o que está na tela: mesmas colunas, mesma busca aplicada
+// e CPF/telefone mascarados como o servidor os entrega — a exportação não é uma porta lateral
+// para o dado íntegro.
+const EXPORT_COLUMNS = [
+  { label: "Inserido em", width: 18, value: (record) => formatDateTime(record.created_at) },
+  { label: "Protocolo", width: 12, value: (record) => record.id },
+  { label: "Orçamento", width: 14, value: (record) => record.numero_orcamento },
+  { label: "Titular", width: 36, value: (record) => record.nome_titular },
+  { label: "CPF", width: 18, value: (record) => record.cpf },
+  { label: "Telefone", width: 18, value: (record) => record.telefone },
+  { label: "Responsável", width: 22, value: (record) => record.responsavel },
+  { label: "Status", width: 12, value: (record) => record.status },
+  { label: "Anulado em", width: 18, value: (record) => formatDateTime(record.anulado_em) },
+  { label: "Motivo da anulação", width: 42, value: (record) => record.motivo_anulacao },
+];
+
+let visibleRecords = [];
 
 function normalizeSearch(value) {
   return String(value ?? "")
@@ -144,24 +164,65 @@ function renderRecords() {
     recordsBody.append(row);
   }
 
+  visibleRecords = filtered;
   const totalLabel = records.length === 1 ? "1 registro" : `${records.length} registros`;
   recordsCount.textContent = query ? `${filtered.length} de ${totalLabel}` : totalLabel;
   recordsTableShell.hidden = filtered.length === 0;
   recordsEmpty.hidden = filtered.length !== 0;
+  exportRecordsButton.disabled = filtered.length === 0;
 }
 
-function showRecordsStatus(message) {
+function exportFileName(now) {
+  const stamp = new Intl.DateTimeFormat("pt-BR", {
+    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+    hour12: false, timeZone: "America/Sao_Paulo",
+  })
+    .formatToParts(now)
+    .reduce((parts, part) => ({ ...parts, [part.type]: part.value }), {});
+  return `VENDAS_ADMINISTRATIVAS_${stamp.year}-${stamp.month}-${stamp.day}_${stamp.hour}${stamp.minute}.xlsx`;
+}
+
+function exportRecords() {
+  if (visibleRecords.length === 0) return;
+  const now = new Date();
+  try {
+    const bytes = buildXlsx({
+      sheetName: "Vendas administrativas",
+      columns: EXPORT_COLUMNS.map(({ label, width }) => ({ label, width })),
+      rows: visibleRecords.map((record) => EXPORT_COLUMNS.map((column) => column.value(record) ?? "")),
+      now,
+    });
+    const url = URL.createObjectURL(new Blob([bytes], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = exportFileName(now);
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  } catch {
+    showRecordsStatus("Não foi possível gerar a planilha agora. Atualize a listagem e tente novamente.", { hideTable: false });
+  }
+}
+
+function showRecordsStatus(message, { hideTable = true } = {}) {
   recordsStatus.hidden = false;
   recordsStatus.className = "form-status error";
   recordsStatus.textContent = message;
+  if (!hideTable) return;
   recordsTableShell.hidden = true;
   recordsEmpty.hidden = true;
+  visibleRecords = [];
+  exportRecordsButton.disabled = true;
 }
 
 async function loadRecords({ force = false } = {}) {
   if (recordsLoaded && !force) return;
   recordsLoaded = false;
   refreshRecordsButton.disabled = true;
+  exportRecordsButton.disabled = true;
   refreshRecordsButton.textContent = "Atualizando…";
   recordsStatus.hidden = true;
   recordsCount.textContent = "Carregando registros…";
@@ -190,6 +251,8 @@ async function activateTab(tab) {
     item.tabIndex = active ? 0 : -1;
   }
   for (const panel of panels) panel.hidden = panel.id !== panelId;
+  // Sem isso a troca de aba herda a rolagem da anterior e o painel abre no meio.
+  window.scrollTo({ top: 0 });
   if (panelId === "records-panel") await loadRecords();
 }
 
@@ -206,6 +269,7 @@ for (const [index, tab] of tabs.entries()) {
 
 recordsSearch.addEventListener("input", renderRecords);
 refreshRecordsButton.addEventListener("click", () => { void loadRecords({ force: true }); });
+exportRecordsButton.addEventListener("click", exportRecords);
 
 function registerWebMcp() {
   const context = document.modelContext;
