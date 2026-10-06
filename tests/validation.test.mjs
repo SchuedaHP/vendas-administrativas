@@ -32,3 +32,16 @@ test("normaliza e valida todos os campos", () => {
     responsavel: "PATRICIA LIMA",
   });
 });
+
+test("aceita as quatro responsáveis e recusa nome fora da lista", () => {
+  const base = {
+    numero_orcamento: "123",
+    cpf: "529.982.247-25",
+    nome_titular: "João da Silva",
+    telefone: "(11) 98765-4321",
+  };
+  for (const responsavel of ["PATRICIA LIMA", "GIOVANNA SANTANA", "TATI SILVA", "BRUNO FERREIRA"]) {
+    assert.equal(validatePayload({ ...base, responsavel }).ok, true, responsavel);
+  }
+  assert.equal(validatePayload({ ...base, responsavel: "BRUNO" }).ok, false);
+});
