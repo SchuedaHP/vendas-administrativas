@@ -282,7 +282,7 @@ function registerWebMcp() {
       cpf: { type: "string", description: "CPF do titular." },
       nome_titular: { type: "string", description: "Nome completo do titular." },
       telefone: { type: "string", description: "Telefone com DDD." },
-      responsavel: { type: "string", enum: ["PATRICIA LIMA", "GIOVANNA SANTANA", "TATI SILVA", "BRUNO FERREIRA"] },
+      responsavel: { type: "string", enum: ["PATRICIA LIMA", "GIOVANNA SANTANA", "TATI SILVA", "BRUNO FERREIRA", "BEATRIZ BRAIDO", "BEATRIZ GIGLIO", "WESLEY BACOCCINI", "LUANA RIBEIRO"] },
     },
     required: ["numero_orcamento", "cpf", "nome_titular", "telefone", "responsavel"],
     additionalProperties: false,
